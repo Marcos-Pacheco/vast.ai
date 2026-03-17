@@ -21,6 +21,7 @@ BASHRC_FILE="$HOME/.bashrc"
 BUILD_FLAG="/workspace/.build_complete"
 MODEL_DIR="$HF_CACHE_DIR/datalab-to/chandra"
 CHANDRA_SERVER_SCRIPT="/workspace/chandra-vllm.sh"
+# VLLM_API_SECRET="myscret" # should be passed on env vars during vast.ai build
 
 if [ -f "$BUILD_FLAG" ]; then
     echo ">>> Build already done. Skipping."
