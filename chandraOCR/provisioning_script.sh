@@ -6,6 +6,7 @@
 # This script installs Python packages to /workspace/python-packages to ensure
 # they persist across instance restarts when the volume is mounted.
 # It also configures Hugging Face cache to persist models on /workspace.
+# Optimized to run only once (skips if already completed).
 # ==============================================================================
 
 set -e  # Exit on error
@@ -17,7 +18,9 @@ PYTHON_DIR="/workspace/python-packages"
 HF_CACHE_DIR="/workspace/huggingface_cache"
 ENV_SETUP_SCRIPT="/workspace/env_setup.sh"
 BASHRC_FILE="$HOME/.bashrc"
-# VLLM_API_SECRET="myscret" # should be passed on env vars during vast.ai build
+INSTALL_FLAG="$PYTHON_DIR/.install_complete"
+MODEL_DIR="$HF_CACHE_DIR/datalab-to/chandra"
+CHANDRA_SERVER_SCRIPT="/workspace/chandra-vllm.sh"
 
 # ------------------------------------------------------------------------------
 # 2. Create Directories
@@ -27,33 +30,44 @@ mkdir -p $PYTHON_DIR
 mkdir -p $HF_CACHE_DIR
 
 # ------------------------------------------------------------------------------
-# 3. Install Python Packages | Pulls Models | Expects cuda-12
+# 3. Install Python Packages (Run Only Once)
 # ------------------------------------------------------------------------------
-echo ">>> Installing packages to $PYTHON_DIR..."
-echo "    (Using cu126 index as per Knowledge Base verification)"
+if [ -f "$INSTALL_FLAG" ]; then
+    echo ">>> Packages already installed. Skipping pip install..."
+else
+    echo ">>> Installing packages to $PYTHON_DIR..."
+    
+    # OPTIONAL: Clean the directory before installing to avoid orphaned packages
+    # Uncomment the line below if you want a clean slate every time you reinstall
+    rm -rf $PYTHON_DIR/* 
 
-pip install --target=$PYTHON_DIR \
-    --ignore-installed \
-    --no-cache-dir \
-    --index-url https://pypi.org/simple/ \
-    --extra-index-url https://download.pytorch.org/whl/cu126 \
-    torch==2.10.0+cu126 \
-    torchaudio==2.10.0+cu126 \
-    torchvision==0.25.0+cu126 \
-    torchcodec==0.10.0 \
-    torchdata==0.10.0 \
-    torchtext==0.6.0 \
-    torch_c_dlpack_ext==0.1.5 \
-    pillow==12.1.0 \
-    chandra-ocr==0.1.8 \
-    huggingface_hub==0.36.2 \
-    vllm==0.17.1
+    pip install --target=$PYTHON_DIR \
+        --ignore-installed \
+        --no-cache-dir \
+        --index-url https://pypi.org/simple/   \
+        --extra-index-url https://download.pytorch.org/whl/cu126   \
+        torch==2.10.0+cu126 \
+        torchaudio==2.10.0+cu126 \
+        torchvision==0.25.0+cu126 \
+        torchcodec==0.10.0 \
+        torchdata==0.10.0 \
+        torchtext==0.6.0 \
+        torch_c_dlpack_ext==0.1.5 \
+        pillow==12.1.0 \
+        chandra-ocr==0.1.8 \
+        huggingface_hub==0.36.2 \
+        vllm==0.17.1
+
+    touch "$INSTALL_FLAG"
+    echo ">>> Package installation complete. Flag file created."
+fi
 
 # ------------------------------------------------------------------------------
 # 4. Create Environment Setup Script
 # ------------------------------------------------------------------------------
 # This file lives on /workspace, so it persists across reboots.
 # It sets PYTHONPATH, PATH, and HF_HOME.
+# NOTE: pip --target installs scripts to the root of the target dir, NOT /bin
 # ------------------------------------------------------------------------------
 echo ">>> Creating environment setup script at $ENV_SETUP_SCRIPT..."
 cat > $ENV_SETUP_SCRIPT << EOF
@@ -62,7 +76,7 @@ cat > $ENV_SETUP_SCRIPT << EOF
 
 # 1. Python Packages Path
 export PYTHONPATH=$PYTHON_DIR:\$PYTHONPATH
-export PATH=$PYTHON_DIR/bin:\$PATH
+export PATH=$PYTHON_DIR:\$PATH
 
 # 2. Hugging Face & Model Cache
 # This ensures models downloaded by vllm/transformers are saved to /workspace
@@ -91,21 +105,57 @@ fi
 echo ">>> Applying environment changes to current session..."
 source $BASHRC_FILE
 
-# ------------------------------------------------------------------------------
-# 7. Downloading models
-# ------------------------------------------------------------------------------
-echo ">>> Pulling models packages to $PYTHON_DIR..."
-huggingface-cli download datalab-to/chandra
+# CRITICAL: Clear bash command cache so it finds newly installed binaries
+# This is required every time the container starts
+hash -r
+
+echo ">>> Environment applied and command cache cleared."
 
 # ------------------------------------------------------------------------------
-# 8. Verification
+# 7. Downloading Models (Run Only If Not Exists)
+# ------------------------------------------------------------------------------
+if [ -d "$MODEL_DIR" ]; then
+    echo ">>> Models already present at $MODEL_DIR. Skipping download..."
+else
+    echo ">>> Pulling models to $HF_CACHE_DIR..."
+    # Use python -m to ensure we use the newly installed package regardless of PATH
+    python -m huggingface_hub.commands.huggingface_cli download datalab-to/chandra
+    echo ">>> Model download complete."
+fi
+
+# ------------------------------------------------------------------------------
+# 9. Create vllm server script for ChandraOC
+# ------------------------------------------------------------------------------
+cat > $CHANDRA_SERVER_SCRIPT << EOF
+python -m vllm.entrypoints.openai.api_server \
+    --model datalab-to/chandra \
+    --gpu-memory-utilization 0.9 \
+    --max-model-len 16384 \
+    --max-num-batched-tokens 32768 \
+    --max-num-seqs 32 \
+    --dtype bfloat16 \
+    --tensor-parallel-size 2 \
+    --distributed-executor-backend ray \
+    --nnodes 1 \
+    --no-enforce-eager \
+    --host 0.0.0.0 \
+    --port 8080 \
+    --api-key "$VLLM_API_SECRET"
+EOF
+chmod +x $CHANDRA_SERVER_SCRIPT
+
+# ------------------------------------------------------------------------------
+# 9. Verification
 # ------------------------------------------------------------------------------
 echo ">>> Provisioning complete!"
 echo "    Packages installed in: $PYTHON_DIR"
 echo "    Model cache configured at: $HF_CACHE_DIR"
 echo ""
 echo "    To verify PyTorch:"
-echo "    python -c 'import torch; print(torch._version_)'"
+echo "    python -c 'import torch; print(torch.__version__)'"
 echo ""
 echo "    To verify vLLM:"
 echo "    vllm --version"
+echo ""
+echo "    To verify Hugging Face CLI:"
+echo "    huggingface-cli --version"
