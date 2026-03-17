@@ -27,7 +27,7 @@ mkdir -p $PYTHON_DIR
 mkdir -p $HF_CACHE_DIR
 
 # ------------------------------------------------------------------------------
-# 3. Install Python Packages | Expects cuda-12
+# 3. Install Python Packages | Pulls Models | Expects cuda-12
 # ------------------------------------------------------------------------------
 echo ">>> Installing packages to $PYTHON_DIR..."
 echo "    (Using cu126 index as per Knowledge Base verification)"
@@ -46,6 +46,7 @@ pip install --target=$PYTHON_DIR \
     torch_c_dlpack_ext==0.1.5 \
     pillow==12.1.0 \
     chandra-ocr==0.1.8 \
+    huggingface_hub==0.36.2 \
     vllm==0.17.1
 
 # ------------------------------------------------------------------------------
@@ -91,7 +92,13 @@ echo ">>> Applying environment changes to current session..."
 source $BASHRC_FILE
 
 # ------------------------------------------------------------------------------
-# 7. Verification
+# 7. Downloading models
+# ------------------------------------------------------------------------------
+echo ">>> Pulling models packages to $PYTHON_DIR..."
+huggingface-cli download datalab-to/chandra
+
+# ------------------------------------------------------------------------------
+# 8. Verification
 # ------------------------------------------------------------------------------
 echo ">>> Provisioning complete!"
 echo "    Packages installed in: $PYTHON_DIR"
