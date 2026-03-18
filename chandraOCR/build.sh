@@ -82,6 +82,7 @@ export HF_HOME=$HF_CACHE_DIR
 export TRANSFORMERS_CACHE=$HF_CACHE_DIR
 export HF_DATASETS_CACHE=$HF_CACHE_DIR
 EOF
+    chmod +x "$ENV_SETUP_SCRIPT"
 
     # ------------------------------------------------------------------------------
     # 5. Update ~/.bashrc to Source the Persistent Setup
