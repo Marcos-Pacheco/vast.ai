@@ -1,33 +1,36 @@
 #!/bin/bash
 
+WORKSPACE_DIR=/workspace
+
 # ==============================================================================
 # Vast.ai Persistent Provisioning Script
 # ==============================================================================
-# This script installs Python packages to /workspace/python-packages to ensure
-# they persist across instance restarts when the volume is mounted.
-# It also configures Hugging Face cache to persist models on /workspace.
+# This script installs Python packages to /"$WORKSPACE_DIR"/python-packages to 
+# ensure they persist across instance restarts when the volume is mounted.
+# It also configures Hugging Face cache to persist models on /"$WORKSPACE_DIR".
 # Optimized to run only once (skips if already completed).
 # ==============================================================================
 
 set -e  # Exit on error
 
 # ------------------------------------------------------------------------------
-# 1. Configuration & Paths
+# Configuration & Paths
 # ------------------------------------------------------------------------------
-PYTHON_DIR="/workspace/python-packages"
-HF_CACHE_DIR="/workspace/huggingface_cache"
-ENV_SETUP_SCRIPT="/workspace/env_setup.sh"
+PYTHON_DIR="$WORKSPACE_DIR/python-packages"
+HF_CACHE_DIR="$WORKSPACE_DIR/huggingface_cache"
+COMPOSER_DIR="$WORKSPACE_DIR/composer"
+CHANDRA_API_DIR="$WORKSPACE_DIR/chandra-ocr"
+ENV_SETUP_SCRIPT="$WORKSPACE_DIR/env_setup.sh"
 BASHRC_FILE="$HOME/.bashrc"
-BUILD_FLAG="/workspace/.build_complete"
+BUILD_FLAG="$WORKSPACE_DIR/.build_complete"
 MODEL_DIR="$HF_CACHE_DIR/datalab-to/chandra"
-CHANDRA_SERVER_SCRIPT="/workspace/chandra-vllm.sh"
 # VLLM_API_SECRET="myscret" # should be passed on env vars during vast.ai build
 
 if [ -f "$BUILD_FLAG" ]; then
     echo ">>> Build already done. Skipping."
 else
     # ------------------------------------------------------------------------------
-    # 2. Create Directories
+    # Create Directories
     # ------------------------------------------------------------------------------
     # Clean the directories before installing to avoid orphaned packages/models
     rm -rf $PYTHON_DIR/
@@ -38,7 +41,49 @@ else
     mkdir -p $HF_CACHE_DIR
 
     # ------------------------------------------------------------------------------
-    # 3. Install Python Packages
+    # Install PHP Packages
+    # ------------------------------------------------------------------------------
+    apt update
+    apt install -y php php-cli \
+        php-mbstring \
+        php-xml \
+        php-curl \
+        php-zip \
+        php-mysql \
+        php-fileinfo \
+        php-posix \
+        unzip \
+        curl \
+        git \
+        git-crypt 
+
+    # ------------------------------------------------------------------------------
+    # Install Composer
+    # ------------------------------------------------------------------------------
+    cd "$WORKSPACE_DIR"
+    curl -sS https://getcomposer.org/installer | php
+    sudo mv composer.phar "$COMPOSER_DIR"
+
+    # ------------------------------------------------------------------------------
+    # API Build
+    # ------------------------------------------------------------------------------
+    git clone https://github.com/Marcos-Pacheco/chandra-api.git "$CHANDRA_API_DIR"
+    cd "$CHANDRA_API_DIR"
+    echo "$GIT_CRYPT_KEY" | base64 -d > git-crypt-key #GIT_CRYPT_KEY as env var
+    git-crypt unlock git-crypt-key
+    shred -u git-crypt-key
+    cp .env.example .env
+    composer install
+    sed -n 's/^Env Line: \(.*\)$/\1/p' <(bin/keys --name=production) | \
+        xargs -I {} sed -i 's/^API_KEYS=.*/API_KEYS={}/' .env
+    sed -i "s|^CHANDRA_BIN_PATH=.*|CHANDRA_BIN_PATH=${PYTHON_DIR}/bin|" .env
+    # nohup php -S 0.0.0.0:8080 -t public > server.log 2>&1 &
+    # tmux new-session -d -s api "php -S 0.0.0.0:8080 -t public > server.log 2>&1"
+    tmux new-session -d -s api "php -S 0.0.0.0:8080 -t public"
+    cd "$WORKSPACE_DIR"
+
+    # ------------------------------------------------------------------------------
+    # Install Python Packages
     # ------------------------------------------------------------------------------
     echo ">>> Installing packages to $PYTHON_DIR..."
 
@@ -61,9 +106,9 @@ else
     echo ">>> Package installation complete. Flag file created."
 
     # ------------------------------------------------------------------------------
-    # 4. Create Environment Setup Script
+    # Create Environment Setup Script
     # ------------------------------------------------------------------------------
-    # This file lives on /workspace, so it persists across reboots.
+    # This file lives on "$WORKSPACE_DIR", so it persists across reboots.
     # It sets PYTHONPATH, PATH, and HF_HOME.
     # NOTE: pip --target installs scripts to the root of the target dir, NOT /bin
     # ------------------------------------------------------------------------------
@@ -77,15 +122,28 @@ export PYTHONPATH=$PYTHON_DIR:\$PYTHONPATH
 export PATH=$PYTHON_DIR:\$PATH
 
 # 2. Hugging Face & Model Cache
-# This ensures models downloaded by vllm/transformers are saved to /workspace
+# This ensures models downloaded by vllm/transformers are saved to "$WORKSPACE_DIR"
 export HF_HOME=$HF_CACHE_DIR
 export TRANSFORMERS_CACHE=$HF_CACHE_DIR
 export HF_DATASETS_CACHE=$HF_CACHE_DIR
 EOF
-    chmod +x "$ENV_SETUP_SCRIPT"
+
+    # Configure tmux to use login shells and update environment
+    echo ">>> Configuring tmux..."
+cat >> ~/.tmux.conf << EOF
+# Force tmux to use login shells (sources .bashrc properly)
+set-option -g default-command "bash -l"
+
+# Prevent tmux from stripping these variables on reattach
+set-option -g update-environment "PATH PYTHONPATH LD_LIBRARY_PATH HF_HOME HOME USER"
+
+# Allow tmux to accept the PATH variable from outside
+set-environment -g PATH
+set-environment -g PYTHONPATH
+EOF
 
     # ------------------------------------------------------------------------------
-    # 5. Update ~/.bashrc to Source the Persistent Setup
+    # Update ~/.bashrc to Source the Persistent Setup
     # ------------------------------------------------------------------------------
     echo ">>> Updating $BASHRC_FILE to source environment setup..."
     SOURCE_LINE="source $ENV_SETUP_SCRIPT"
@@ -99,7 +157,7 @@ EOF
     fi
 
     # ------------------------------------------------------------------------------
-    # 6. Apply Changes Immediately
+    # Apply Changes
     # ------------------------------------------------------------------------------
     echo ">>> Applying environment changes to current session..."
     source $BASHRC_FILE
@@ -111,7 +169,7 @@ EOF
     echo ">>> Environment applied and command cache cleared."
 
     # ------------------------------------------------------------------------------
-    # 7. Downloading Models (Run Only If Not Exists)
+    # Downloading Models
     # ------------------------------------------------------------------------------
     if [ -d "$MODEL_DIR" ]; then
         echo ">>> Models already present at $MODEL_DIR. Skipping download..."
@@ -123,28 +181,7 @@ EOF
     fi
 
     # ------------------------------------------------------------------------------
-    # 9. Create vllm server script for ChandraOC
-    # ------------------------------------------------------------------------------
-    cat > $CHANDRA_SERVER_SCRIPT << EOF
-python -m vllm.entrypoints.openai.api_server \
-    --model datalab-to/chandra \
-    --gpu-memory-utilization 0.9 \
-    --max-model-len 16384 \
-    --max-num-batched-tokens 32768 \
-    --max-num-seqs 32 \
-    --dtype bfloat16 \
-    --tensor-parallel-size 2 \
-    --distributed-executor-backend ray \
-    --nnodes 1 \
-    --no-enforce-eager \
-    --host 0.0.0.0 \
-    --port 8080 \
-    --api-key "$VLLM_API_SECRET"
-EOF
-    chmod +x $CHANDRA_SERVER_SCRIPT
-
-    # ------------------------------------------------------------------------------
-    # 10. Verification
+    # Verification
     # ------------------------------------------------------------------------------
     echo ">>> Provisioning complete!"
     echo "    Packages installed in: $PYTHON_DIR"
