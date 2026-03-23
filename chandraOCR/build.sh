@@ -89,7 +89,6 @@ else
     sed -i "s|^CHANDRA_BIN_PATH=.*|CHANDRA_BIN_PATH=${PYTHON_DIR}/bin|" .env
     # nohup php -S 0.0.0.0:8080 -t public > server.log 2>&1 &
     # tmux new-session -d -s api "php -S 0.0.0.0:8080 -t public > server.log 2>&1"
-    tmux new-session -d -s api "php -S 0.0.0.0:8080 -t public"
     cd "$WORKSPACE_DIR"
 
     # ------------------------------------------------------------------------------
@@ -128,7 +127,7 @@ else
 # Persistent Environment Configuration
 
 # 1. Python Packages Path
-export PYTHONPATH=$PYTHON_DIR:\$PYTHONPATH
+export PYTHONPATH=\$PYTHONPATH:$PYTHON_DIR/bin
 export PATH=\$PATH:$PYTHON_DIR
 
 # 2. Hugging Face & Model Cache
@@ -209,3 +208,8 @@ EOF
 
     touch "$BUILD_FLAG"
 fi
+
+# ------------------------------------------------------------------------------
+# SERVE
+# ------------------------------------------------------------------------------
+tmux new-session -d -s api "php -S 0.0.0.0:8080 -t public"
