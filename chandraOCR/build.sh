@@ -18,7 +18,7 @@ set -e  # Exit on error
 # ------------------------------------------------------------------------------
 PYTHON_DIR="$WORKSPACE_DIR/python-packages"
 HF_CACHE_DIR="$WORKSPACE_DIR/huggingface_cache"
-COMPOSER_DIR="$WORKSPACE_DIR/composer"
+COMPOSER_PATH="/usr/local/bin/composer"
 CHANDRA_API_DIR="$WORKSPACE_DIR/chandra-api"
 ENV_SETUP_SCRIPT="$WORKSPACE_DIR/env_setup.sh"
 BASHRC_FILE="$HOME/.bashrc"
@@ -72,7 +72,7 @@ else
     # ------------------------------------------------------------------------------
     cd "$WORKSPACE_DIR"
     curl -sS https://getcomposer.org/installer | php
-    sudo mv composer.phar "$COMPOSER_DIR"
+    sudo mv composer.phar "$COMPOSER_PATH"
 
     # ------------------------------------------------------------------------------
     # API Build
