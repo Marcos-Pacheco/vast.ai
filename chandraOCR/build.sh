@@ -19,7 +19,7 @@ set -e  # Exit on error
 PYTHON_DIR="$WORKSPACE_DIR/python-packages"
 HF_CACHE_DIR="$WORKSPACE_DIR/huggingface_cache"
 COMPOSER_DIR="$WORKSPACE_DIR/composer"
-CHANDRA_API_DIR="$WORKSPACE_DIR/chandra-ocr"
+CHANDRA_API_DIR="$WORKSPACE_DIR/chandra-api"
 ENV_SETUP_SCRIPT="$WORKSPACE_DIR/env_setup.sh"
 BASHRC_FILE="$HOME/.bashrc"
 BUILD_FLAG="$WORKSPACE_DIR/.build_complete"
@@ -41,17 +41,27 @@ else
     mkdir -p $HF_CACHE_DIR
 
     # ------------------------------------------------------------------------------
-    # Install PHP Packages
+    # Install Utils
     # ------------------------------------------------------------------------------
     apt update
-    apt install -y php php-cli \
-        php-mbstring \
-        php-xml \
-        php-curl \
-        php-zip \
-        php-mysql \
-        php-fileinfo \
-        php-posix \
+    apt install -y \
+        btop
+
+    # ------------------------------------------------------------------------------
+    # Install PHP Packages
+    # ------------------------------------------------------------------------------
+    apt install -y software-properties-common
+    add-apt-repository ppa:ondrej/php -y
+    apt update
+    apt install -y \
+        php8.4 \
+        php8.4-cli \
+        php8.4-mbstring \
+        php8.4-xml \
+        php8.4-curl \
+        php8.4-zip \
+        php8.4-mysql \
+        php8.4-common \
         unzip \
         curl \
         git \
@@ -119,7 +129,7 @@ else
 
 # 1. Python Packages Path
 export PYTHONPATH=$PYTHON_DIR:\$PYTHONPATH
-export PATH=$PYTHON_DIR:\$PATH
+export PATH=\$PATH:$PYTHON_DIR
 
 # 2. Hugging Face & Model Cache
 # This ensures models downloaded by vllm/transformers are saved to "$WORKSPACE_DIR"
@@ -138,8 +148,8 @@ set-option -g default-command "bash -l"
 set-option -g update-environment "PATH PYTHONPATH LD_LIBRARY_PATH HF_HOME HOME USER"
 
 # Allow tmux to accept the PATH variable from outside
-set-environment -g PATH
-set-environment -g PYTHONPATH
+# set-environment -g PATH
+# set-environment -g PYTHONPATH
 EOF
 
     # ------------------------------------------------------------------------------
@@ -176,7 +186,8 @@ EOF
     else
         echo ">>> Pulling models to $HF_CACHE_DIR..."
         # Use python -m to ensure we use the newly installed package regardless of PATH
-        python -m huggingface_hub.commands.huggingface_cli download datalab-to/chandra
+        # python -m huggingface_hub.commands.huggingface_cli download datalab-to/chandra 
+        hf download datalab-to/chandra
         echo ">>> Model download complete."
     fi
 
