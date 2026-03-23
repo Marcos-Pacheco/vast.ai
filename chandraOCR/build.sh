@@ -72,7 +72,7 @@ else
     # ------------------------------------------------------------------------------
     cd "$WORKSPACE_DIR"
     curl -sS https://getcomposer.org/installer | php
-    sudo mv composer.phar "$COMPOSER_PATH"
+    mv composer.phar "$COMPOSER_PATH"
 
     # ------------------------------------------------------------------------------
     # API Build
