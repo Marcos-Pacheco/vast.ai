@@ -86,7 +86,7 @@ else
     composer install
     sed -n 's/^Env Line: \(.*\)$/\1/p' <(bin/keys --name=production) | \
         xargs -I {} sed -i 's/^API_KEYS=.*/API_KEYS={}/' .env
-    sed -i "s|^CHANDRA_BIN_PATH=.*|CHANDRA_BIN_PATH=${PYTHON_DIR}/bin|" .env
+    sed -i "s|^CHANDRA_BIN_PATH=.*|CHANDRA_BIN_PATH=${PYTHON_DIR}/bin/|" .env
     # nohup php -S 0.0.0.0:8080 -t public > server.log 2>&1 &
     # tmux new-session -d -s api "php -S 0.0.0.0:8080 -t public > server.log 2>&1"
     cd "$WORKSPACE_DIR"
