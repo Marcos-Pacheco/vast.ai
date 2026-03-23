@@ -127,8 +127,8 @@ else
 # Persistent Environment Configuration
 
 # 1. Python Packages Path
-export PYTHONPATH=\$PYTHONPATH:$PYTHON_DIR/bin
-export PATH=\$PATH:$PYTHON_DIR
+export PYTHONPATH=\$PYTHONPATH:$PYTHON_DIR
+export PATH=\$PATH:$PYTHON_DIR/bin
 
 # 2. Hugging Face & Model Cache
 # This ensures models downloaded by vllm/transformers are saved to "$WORKSPACE_DIR"
