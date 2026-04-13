@@ -24,7 +24,8 @@ ENV_SETUP_SCRIPT="$WORKSPACE_DIR/env_setup.sh"
 BASHRC_FILE="$HOME/.bashrc"
 BUILD_FLAG="$WORKSPACE_DIR/.build_complete"
 MODEL_DIR="$HF_CACHE_DIR/datalab-to/chandra"
-# VLLM_API_SECRET="myscret" # should be passed on env vars during vast.ai build
+# VLLM_API_SECRET="myscret" # will passed as env var during vast.ai build
+# GIT_CRYPT_KEY="mykey" # will be passed as env var during vast.ai build
 
 if [ -f "$BUILD_FLAG" ]; then
     echo ">>> Build already done. Skipping."
@@ -79,7 +80,7 @@ else
     # ------------------------------------------------------------------------------
     git clone https://github.com/Marcos-Pacheco/chandra-api.git "$CHANDRA_API_DIR"
     cd "$CHANDRA_API_DIR"
-    echo "$GIT_CRYPT_KEY" | base64 -d > git-crypt-key #GIT_CRYPT_KEY as env var
+    echo "$GIT_CRYPT_KEY" | base64 -d > git-crypt-key
     git-crypt unlock git-crypt-key
     shred -u git-crypt-key
     cp .env.example .env
@@ -111,7 +112,12 @@ else
         pillow==12.1.0 \
         chandra-ocr==0.1.8 \
         huggingface_hub==0.36.2 \
-        vllm==0.17.1
+        filetype==1.2.0 \
+        six==1.17.0 \
+        markdownify==1.2.2 \
+        pypdfium2==5.6.0 \
+        ray==2.54.1 \
+        vllm==0.19.0
     echo ">>> Package installation complete. Flag file created."
 
     # ------------------------------------------------------------------------------
@@ -184,8 +190,6 @@ EOF
         echo ">>> Models already present at $MODEL_DIR. Skipping download..."
     else
         echo ">>> Pulling models to $HF_CACHE_DIR..."
-        # Use python -m to ensure we use the newly installed package regardless of PATH
-        # python -m huggingface_hub.commands.huggingface_cli download datalab-to/chandra 
         hf download datalab-to/chandra
         echo ">>> Model download complete."
     fi
