@@ -114,7 +114,7 @@ else
         huggingface_hub==0.36.2 \
         filetype==1.2.0 \
         six==1.17.0 \
-        markdownify==1.2.2 \
+        markdownify==1.1.0 \
         pypdfium2==5.6.0 \
         ray==2.54.1 \
         vllm==0.19.0
